@@ -9,9 +9,11 @@
     <script src="https://unpkg.com/react@16.3.0-alpha.1/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@16.3.0-alpha.1/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6.15.0/babel.min.js"></script>
+    <script src="https://tylermcginnis.com/goals-todos-api/index.js"></script>
+    <script src="https://unpkg.com/redux-thunk@2.2.0/dist/redux-thunk.min.js"></script>
   </head>
   <body>
-    <h1><b><em>Vanilla js App</em></b></h1>
+    <!-- <h1><b><em>Vanilla js App</em></b></h1>
     <div>
       <h1>Todo list</h1>
       <div>
@@ -28,8 +30,10 @@
         <ul id="goals"></ul>
       </div>
     </div>
-    <hr />
-    <h1><b><em>React App</em></b></h1>
+    <hr /> -->
+    <h1>
+      <b><em>React App</em></b>
+    </h1>
     <div id="app"></div>
     <script>
       function generateId() {
@@ -47,6 +51,7 @@
       const TOGGLE_TODO = "TOGGLE_TODO";
       const ADD_GOAL = "ADD_GOAL";
       const REMOVE_GOAL = "REMOVE_GOAL";
+      const RECEIVE_DATA = "RECEIVE_DATA";
 
       // action creators
       function addTodoAction(todo) {
@@ -56,6 +61,13 @@
         };
       }
 
+      function receiveDataAction(todos, goals) {
+        return {
+          type: RECEIVE_DATA,
+          todos,
+          goals,
+        };
+      }
       function removeTodoAction(id) {
         return {
           type: REMOVE_TODO,
@@ -96,6 +108,8 @@
                 ? todo
                 : Object.assign({}, todo, { complete: !todo.complete })
             );
+          case RECEIVE_DATA:
+            return action.todos;
           default:
             return state;
         }
@@ -107,6 +121,17 @@
             return state.concat([action.goal]);
           case REMOVE_GOAL:
             return state.filter((goal) => goal.id !== goal.id);
+          case RECEIVE_DATA:
+            return action.goals;
+          default:
+            return state;
+        }
+      }
+
+      function loading(state = true, action) {
+        switch (action.type) {
+          case RECEIVE_DATA:
+            return false;
           default:
             return state;
         }
@@ -143,80 +168,10 @@
         Redux.combineReducers({
           todos,
           goals,
+          loading,
         }),
         Redux.applyMiddleware(checker, logger)
       );
-
-      store.subscribe(() => {
-        const { todos, goals } = store.getState();
-        document.getElementById("todos").innerHTML = "";
-        document.getElementById("goals").innerHTML = "";
-        todos.forEach(addTodoToDom);
-        goals.forEach(addGoalToDom);
-        // console.log("The new state is: ", store.getState());
-      });
-
-      //DOM CODE
-      function createTodo() {
-        const input = document.getElementById("todo");
-        const name = input.value;
-        input.value = "";
-
-        store.dispatch(
-          addTodoAction({
-            name,
-            complete: false,
-            // id: state.length + 1,
-            id: generateId(),
-          })
-        );
-      }
-
-      function createGoal() {
-        const input = document.getElementById("goal");
-        const name = input.value;
-        input.value = "";
-
-        store.dispatch(
-          addGoalAction({
-            name,
-            id: generateId(),
-          })
-        );
-      }
-
-      document.getElementById("todoBtn").addEventListener("click", createTodo);
-      document.getElementById("goalBtn").addEventListener("click", createGoal);
-
-      function createRemoveButton(onClick) {
-        const removeBtn = document.createElement("button");
-        removeBtn.innerHTML = "X";
-        removeBtn.addEventListener("click", onClick);
-        return removeBtn;
-      }
-
-      function addTodoToDom(todo) {
-        const node = document.createElement("li");
-        const text = document.createTextNode(todo.name);
-        const removeBtn = createRemoveButton(() => {
-          store.dispatch(removeTodoAction(todo.id));
-        });
-        node.appendChild(text);
-        node.appendChild(removeBtn);
-        node.style.textDecoration = todo.complete ? "line-through" : "none";
-        node.addEventListener("click", () => {
-          store.dispatch(toggleTodoAction(todo.id));
-        });
-
-        document.getElementById("todos").appendChild(node);
-      }
-      function addGoalToDom(goal) {
-        const node = document.createElement("li");
-        const text = document.createTextNode(goal.name);
-        node.appendChild(text);
-
-        document.getElementById("goals").appendChild(node);
-      }
     </script>
     <script type="text/babel">
       function List(props) {
@@ -244,22 +199,28 @@
       class Todos extends React.Component {
         addItem = (e) => {
           e.preventDefault();
-          const name = this.input.value;
-          this.input.value = "";
-
-          this.props.store.dispatch(
-            addTodoAction({
-              name,
-              complete: false,
-              id: generateId(),
+          return API.saveTodo(this.input.value)
+            .then((todo) => {
+              this.props.store.dispatch(addTodoAction(todo));
+              this.input.value = "";
             })
-          );
+            .catch(() => {
+              alert("There was an error. Try again.");
+            });
         };
         removeItem = (todo) => {
           this.props.store.dispatch(removeTodoAction(todo.id));
+          return API.deleteTodo(todo.id).catch(() => {
+            this.props.store.dispatch(addTodoAction(todo));
+            alert("An error occured");
+          });
         };
         toggleItem = (id) => {
           this.props.store.dispatch(toggleTodoAction(id));
+          return API.saveTodoToggle(id).catch(() => {
+            this.props.store.dispatch(toggleTodoAction(id));
+            alert("An error occured");
+          });
         };
         render() {
           return (
@@ -284,18 +245,21 @@
       class Goals extends React.Component {
         addItem = (e) => {
           e.preventDefault();
-          const name = this.input.value;
-          this.input.value = "";
-
-          this.props.store.dispatch(
-            addGoalAction({
-              name,
-              id: generateId(),
-            })
-          );
+          return API.saveGoal(this.input.value)
+          .then((goal) => {
+            this.props.store.dispatch(addGoalAction(goal))
+            this.input.value = ''
+          })
+          .catch(() => {
+            alert('There was an error. Try again.')
+          })
         };
         removeItem = (goal) => {
           this.props.store.dispatch(removeGoalAction(goal.id));
+          return API.deleteGoal(goal.id).catch(() => {
+            this.props.store.dispatch(addGoalAction(goal));
+            alert("An error occured");
+          });
         };
         render() {
           const { goals } = this.props;
@@ -314,15 +278,24 @@
           );
         }
       }
+
       class App extends React.Component {
         componentDidMount() {
           const { store } = this.props;
+          Promise.all([API.fetchTodos(), API.fetchGoals()]).then(
+            ([todos, goals]) => {
+              store.dispatch(receiveDataAction(todos, goals));
+            }
+          );
 
           store.subscribe(() => this.forceUpdate());
         }
         render() {
           const { store } = this.props;
-          const { todos, goals } = store.getState();
+          const { todos, goals, loading } = store.getState();
+          if (loading === true) {
+            return <h2>loading</h2>;
+          }
           return (
             <div>
               <Todos todos={todos} store={this.props.store} />
